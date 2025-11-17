@@ -1,0 +1,286 @@
+@using webapp.Service
+@using webapp.Components.Create
+@using webapp.Service.LoginService
+@using webapp.Components.Edit
+@inject ITaskService TaskService
+@inject IEventService EventService
+@inject ILoginService LoginService
+
+@if (currentUser?.Roles.Contains(UserRole.Administrator) == true || currentUser?.Roles.Contains(UserRole.Manager) == true)
+{
+@* Main container for the management interface *@
+
+<div class="manage-container" style="margin-top: 50px;">
+    <h2 class="text-2xl font-bold mb-4">Administrer Opgaver og Events</h2>
+
+    @* Filter dropdown *@
+    <div class="mb-3">
+        <select class="form-select" style="width: 200px;" @onchange="FilterItems">
+            <option value="all">Vis alle</option>
+            <option value="task">Kun opgaver</option>
+            <option value="event">Kun events</option>
+        </select>
+    </div>
+
+    @* Table to display tasks and events *@
+    @if (!string.IsNullOrEmpty(DeleteMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            @DeleteMessage
+            <button type="button" class="btn-close" @onclick="() => DeleteMessage = null"></button>
+        </div>
+    }
+    <div class="table-container">
+        <table class="custom-table">
+            @* Table header *@
+            <thead>
+                <tr>
+                    <th style="padding-left: 30px">Type</th>
+                    <th>Titel</th>
+                    <th>Status</th>
+                    <th>Dato</th>
+                    <th style="text-align: right; padding-right: 30px">Handling</th>
+                </tr>
+            </thead>
+            
+            @* Table body *@
+            <tbody>
+                @foreach (var item in FilteredItems.OrderByDescending(i => i.Date))
+                {
+                    @* Display a single row for each item *@
+                    <tr>
+                        @* Type column with badge *@
+                        <td>
+                            <span class="badge @(item.IsEvent ? "bg-dark" : "bg-secondary")">
+                                @item.Type
+                            </span>
+                        </td>
+
+                        @* Title column *@
+                        <td>@item.Title</td>
+
+                        @* Status column *@
+                        <td>
+                            @if (!item.IsEvent)
+                            {
+                                <span class="badge status-badge @(item.Status switch {                                                                                                                                 
+                                                       core.Models.TaskStatus.NotStarted => "status-not-started",                                                                                                                  
+                                                       core.Models.TaskStatus.InProgress => "status-in-progress",                                                                                                                     
+                                                       core.Models.TaskStatus.Completed => "status-completed",                                                                                                                   
+                                                       _ => "bg-secondary"                                                                                                                                                   
+                                                   })">    
+                                    @item.Status
+                                </span>
+                            }
+                        </td>
+
+                        @* Date column *@
+                        <td>@item.Date.ToString("dd/MM/yyyy")</td>
+
+                        @* Action buttons column *@
+                        <td class="action-buttons">
+                            <button class="btn-edit" 
+                                    data-bs-toggle="modal" 
+                                    data-bs-target="#editModal" 
+                                    @onclick="() => ShowEditDialog(item)">
+                                ✏️ Rediger
+                            </button>
+                            <button class="btn-delete" 
+                                    data-bs-toggle="modal" 
+                                    data-bs-target="#deleteModal" 
+                                    @onclick="() => ShowDeleteDialog(item)">
+                                🗑
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+    </div>
+</div>
+
+<ModalWrapperComponent ModalId="deleteModal" ModalSize="modal-dialog" ShowFooter="false">
+    <div class="p-3">
+        <h5 class="modal-title mb-3">Er du sikker?</h5>
+        <p>
+            Denne handling kan ikke fortrydes. Dette vil permanent slette 
+        </p>
+        <div class="mt-4 text-end">
+            <button class="btn btn-secondary" data-bs-dismiss="modal">Annuller</button>
+            <button class="btn btn-danger ms-2" @onclick="DeleteSelectedItem" data-bs-dismiss="modal">Slet</button>
+        </div>
+    </div>
+</ModalWrapperComponent>
+
+<ModalWrapperComponent ModalId="editModal" ModalSize="modal-xl" ShowFooter="false">
+    @if (SelectedItem != null)
+    {
+        @if (SelectedItem.IsEvent)
+        {
+            <EditEventComponent Id="@SelectedItem.Id" OnSaveCompleted="LoadAllItemsFromServer" />
+        }
+        else
+        {
+            <EditTaskComponent TaskId="@SelectedItem.Id" OnSaveCompleted="LoadAllItemsFromServer" />
+        }
+    }
+</ModalWrapperComponent>
+}
+
+
+@code {
+    // Define a custom type for our items to make the code more readable
+    private class DisplayItem
+    {
+        public int Id { get; set; }
+        public string Type { get; set; }
+        public string Title { get; set; }
+        public DateTime Date { get; set; }
+        public bool IsEvent { get; set; }
+        public core.Models.TaskStatus? Status { get; set; }
+    }
+
+    /// <summary>
+    /// Combined collection of all tasks and events in the system,
+    /// converted to DisplayItem format for unified display
+    /// </summary>
+    private List<DisplayItem> AllItems { get; set; } = new();
+    private List<DisplayItem> FilteredItems { get; set; } = new();
+
+    /// <summary>
+    /// Currently selected item for editing or deletion operations.
+    /// Null when no item is selected.
+    /// </summary>
+    private DisplayItem? SelectedItem { get; set; }
+    private string? DeleteMessage { get; set; }
+
+    private User? currentUser;
+    
+    /// <summary>
+    /// Initializes the component by loading all items from the server
+    /// </summary>
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAllItemsFromServer();
+        currentUser = await LoginService.GetCurrentUser();
+    }
+
+    /// <summary>
+    /// Fetches all tasks and events from their respective services and combines them into a unified display format
+    /// </summary>
+    /// <returns>A task representing the asynchronous operation</returns>
+    private async Task LoadAllItemsFromServer()
+    {
+        try
+        {
+            // Get tasks and events from their respective services
+            var tasks = await TaskService.LoadAllTask();
+            var events = await EventService.GetAllEventsAsync();
+
+            // Convert tasks to our display format
+            var taskItems = tasks.Select(task => new DisplayItem
+            {
+                Id = task.Id,
+                Type = "Opgave",
+                Title = task.Title,
+                Date = task.Date,
+                IsEvent = false,
+                Status = task.Status
+            });
+
+            // Convert events to our display format
+            var eventItems = events.Select(evt => new DisplayItem
+            {
+                Id = evt.Id,
+                Type = "Event",
+                Title = evt.Title,
+                Date = evt.DateForEvent,
+                IsEvent = true,
+                Status = null
+            });
+
+            // Combine both lists
+            AllItems = taskItems.Concat(eventItems).ToList();
+            FilteredItems = AllItems;
+
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading items: {ex.Message}");
+            FilteredItems = new List<DisplayItem>();
+        }
+    }
+
+
+    /// <summary>
+    /// Prepares and shows the delete confirmation dialog for the selected item
+    /// </summary>
+    /// <param name="item">The item to be potentially deleted</param>
+    private void ShowDeleteDialog(DisplayItem item)
+    {
+        SelectedItem = item;
+    }
+
+    /// <summary>
+    /// Prepares and shows the edit dialog for the selected item
+    /// </summary>
+    /// <param name="item">The item to be edited</param>
+    private void ShowEditDialog(DisplayItem item)
+    {
+        SelectedItem = item;
+    }
+
+    /// <summary>
+    /// Deletes the currently selected item from the system
+    /// </summary>
+    /// <returns>A task representing the asynchronous delete operation</returns>
+    private async Task DeleteSelectedItem()
+    {
+        // Make sure we have an item selected
+        if (SelectedItem == null) return;
+
+        try
+        {
+            // Delete either an event or a task
+            bool deleteSuccessful;
+            if (SelectedItem.IsEvent)
+            {
+                deleteSuccessful = await EventService.DeleteEventAsync(SelectedItem.Id);
+            }
+            else
+            {
+                deleteSuccessful = await TaskService.DeleteTaskAsync(SelectedItem.Id);
+            }
+
+            // If deletion was successful, refresh the list and show message
+            if (deleteSuccessful)
+            {
+                DeleteMessage = $"'{SelectedItem.Title}' blev slettet";
+                await LoadAllItemsFromServer();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error deleting item: {ex.Message}");
+        }
+        finally
+        {
+            // Clear the selected item
+            SelectedItem = null;
+        }
+    }
+
+    private void FilterItems(ChangeEventArgs e)
+    {
+        var filterValue = e.Value?.ToString();
+        
+        FilteredItems = filterValue switch
+        {
+            "task" => AllItems.Where(i => !i.IsEvent).ToList(),
+            "event" => AllItems.Where(i => i.IsEvent).ToList(),
+            _ => AllItems
+        };
+    }
+
+}

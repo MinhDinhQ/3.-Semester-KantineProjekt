@@ -1,0 +1,136 @@
+﻿@page "/eventsoverview"
+@using webapp.Service
+@inject IEventService EventService
+@inject ILocationService LocationService
+@inject NavigationManager NavigationManager
+
+<div class="container-fluid py-4">
+    <nav class="navbar navbar-light bg-white shadow-sm rounded mb-4">
+        <div class="container-fluid">
+            <span class="navbar-brand mb-0 h1">
+                <i class="bi bi-calendar-event me-2"></i>Event Oversigt
+            </span>
+            <button class="btn btn-outline-primary" @onclick="NavigateToDashboard">
+                <i class="bi bi-arrow-left me-2"></i>Gå tilbage
+            </button>
+        </div>
+    </nav>
+
+@if (events == null)
+{
+    <div class="d-flex justify-content-center">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else if (!events.Any())
+{
+    <div class="alert alert-info" role="alert">
+        <i class="bi bi-info-circle me-2"></i>Ingen events fundet
+    </div>
+}
+else
+{
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+            @foreach (var eventItem in events)
+            {
+                <div class="col">
+                    <div class="card h-100 shadow-sm hover-shadow">
+                        <div class="card-body d-flex flex-column">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <span class="badge bg-secondary">#@eventItem.Id</span>
+                            </div>
+                            <h5 class="card-title mb-3">@eventItem.Title</h5>
+                            <div class="card-text mb-3">
+                                <div class="d-flex align-items-center mb-2">
+                                    <i class="bi bi-geo-alt-fill me-2 text-primary"></i>
+                                    <span>@GetLocationNameAsync(eventItem.LocationId)</span>
+                                </div>
+                                <div class="d-flex align-items-center mb-2">
+                                    <i class="bi bi-calendar-event me-2 text-primary"></i>
+                                    <span>@eventItem.DateForEvent.ToString("dd/MM/yyyy")</span>
+                                </div>
+                                <div class="d-flex align-items-center">
+                                    <i class="bi bi-person-fill me-2 text-primary"></i>
+                                    <span>@eventItem.ByCustomer</span>
+                                </div>
+                            </div>
+                            <button class="btn btn-primary mt-auto w-100" @onclick="() => NavigateToTasks(eventItem.Id)">
+                                <i class="bi bi-eye me-2"></i>Se event
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            }
+    </div>
+}
+</div>
+
+@code {
+    /// <summary>
+    /// Stores the list of all events to be displayed
+    /// </summary>
+    private List<TaskEvent> events;
+
+    /// <summary>
+    /// Cache of location information to avoid repeated API calls
+    /// Key: LocationId, Value: Location object
+    /// </summary>
+    private Dictionary<int, Location?> _locations = new();
+
+    /// <summary>
+    /// Initializes the component by loading all events
+    /// </summary>
+    /// <returns>A task representing the event loading operation</returns>
+    protected override async Task OnInitializedAsync()
+    {
+        events = await EventService.GetAllEventsAsync();
+    }
+
+    /// <summary>
+    /// Retrieves the location name for a given location ID
+    /// Uses cached location data when available, otherwise fetches from service
+    /// </summary>
+    /// <param name="locationId">The ID of the location to look up</param>
+    /// <returns>The location name or appropriate placeholder text</returns>
+    private string GetLocationNameAsync(int locationId)
+    {
+        if (locationId <= 0)
+            return "No location assigned";
+
+        if (_locations.TryGetValue(locationId, out var location))
+        {
+            return location?.Name ?? "No location assigned";
+        }
+
+        var task = LocationService.GetLocationByIdAsync(locationId);
+        task.ContinueWith(t =>
+        {
+            if (t.IsCompletedSuccessfully)
+            {
+                _locations[locationId] = t.Result;
+                StateHasChanged();
+            }
+        }, TaskScheduler.Current);
+        
+        return "Loading...";
+    }
+    
+    /// <summary>
+    /// Navigates to the detailed view of a specific event
+    /// </summary>
+    /// <param name="EventId">The ID of the event to view</param>
+    private void NavigateToTasks(int EventId)
+    {
+        NavigationManager.NavigateTo($"/eventviewer/{EventId}");
+    }
+
+    /// <summary>
+    /// Navigates back to the dashboard page
+    /// </summary>
+    private void NavigateToDashboard()
+    {
+        NavigationManager.NavigateTo("/dashboard");
+    }
+}

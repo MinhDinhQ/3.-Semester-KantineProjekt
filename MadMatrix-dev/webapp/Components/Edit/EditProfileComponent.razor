@@ -1,0 +1,216 @@
+@inject Blazored.LocalStorage.ILocalStorageService localStorage
+@inject ILoginService loginService
+@inject NavigationManager navManager
+@inject IUserService UserService
+@using webapp.Service
+@using webapp.Service.LoginService
+
+<div class="card" style="margin: 5px auto; border: none; box-shadow: none">
+<h3>Profiloversigt</h3>
+
+<div class="edit-profile-form">
+    @if (isLoading)
+    {
+        <div class="text-center">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else if (user != null && editContext != null)
+    {
+        <EditForm EditContext="@editContext" OnValidSubmit="HandleValidSubmit">
+
+            <div class="form-group">
+                <label for="firstName">Fornavn</label>
+                <InputText id="firstName" class="form-control" @bind-Value="user.FirstName" disabled="@(!isEditable)" />
+            </div>
+
+            <div class="form-group">
+                <label for="lastName">Efternavn</label>
+                <InputText id="lastName" class="form-control" @bind-Value="user.LastName" disabled="@(!isEditable)" />
+            </div>
+
+            <div class="form-group">
+                <label for="email">Email</label>
+                <InputText id="email" class="form-control" @bind-Value="user.Email" disabled="@(!isEditable)" />
+            </div>
+
+            <div class="form-group">
+                <label for="password">Adgangskode</label>
+                <InputText id="password" class="form-control" @bind-Value="user.Password" disabled="@(!isEditable)" />
+            </div>
+
+            <div class="form-group">
+                <label for="phoneNumber">Telefonnummer</label>
+                <InputText id="phoneNumber" class="form-control" @bind-Value="user.PhoneNumber" disabled="@(!isEditable)" />
+            </div>
+
+            <button type="button" class="btn btn-primary" style="margin-top: 20px; width: 100%" @onclick="HandleButtonClick">
+                @(isEditable ? "Gem profil" : "Rediger profil")
+            </button>
+            <div>@saveMessage</div>
+        </EditForm>
+    }
+    else
+    {
+        <p>Brugerdata kunne ikke hentes. Vær venlig at logge ind igen.</p>
+    }
+</div>
+</div>
+
+@code {
+    /// <summary>
+    /// The current user whose profile is being edited
+    /// </summary>
+    private User? user;
+
+    /// <summary>
+    /// Controls whether the form fields are editable
+    /// When false, fields are in read-only mode
+    /// </summary>
+    private bool isEditable = false;
+
+    /// <summary>
+    /// Displays feedback messages to the user about save operations
+    /// </summary>
+    private string saveMessage = "";
+
+    /// <summary>
+    /// Provides form validation and change tracking functionality
+    /// </summary>
+    private EditContext? editContext;
+
+    /// <summary>
+    /// Indicates whether the component is currently loading user data
+    /// </summary>
+    private bool isLoading = true;
+
+    /// <summary>
+    /// Service for performing user-related operations
+    /// Injected by the dependency injection container
+    /// </summary>
+    [Inject]
+    private IUserService userService { get; set; }
+                                                                                                                                                                                                                                                                            
+    /// <summary>
+    /// Initializes the component by loading the current user's data
+    /// Sets up the EditContext for form validation
+    /// </summary>
+    /// <returns>
+    /// A task representing the asynchronous operation.
+    /// Redirects to dashboard if no user is found.
+    /// Sets error message on failure.
+    /// </returns>
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            isLoading = true;
+            StateHasChanged();
+
+            user = await loginService.GetCurrentUser();
+            if (user == null)
+            {
+                // Redirect to dashboard if no user data is found
+                navManager.NavigateTo("/dashboard");
+                return;
+            }
+
+            editContext = new EditContext(user);
+        }
+        catch (Exception ex)
+        {
+            // Handle errors, e.g., log or show an error message
+            saveMessage = "Fejl under indlæsning af brugerdata.";
+            Console.WriteLine($"Error loading user data: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+                                                                                                                                                                                                                                                                            
+    /// <summary>
+    /// Handles the form submission when valid
+    /// Attempts to save the user data
+    /// </summary>
+    /// <returns>
+    /// A task representing the asynchronous operation.
+    /// Sets error message on failure.
+    /// </returns>
+    private async Task HandleValidSubmit()
+    {
+        try
+        {
+            await SaveUserData(user);
+        }
+        catch (Exception ex)
+        {
+            // Handle errors, e.g., log or show an error message
+            saveMessage = "Fejl under gemning af data.";
+        }
+    }
+
+    /// <summary>
+    /// Toggles between edit and read-only modes
+    /// Updates the UI to reflect the new mode
+    /// </summary>
+    private void ToggleEditMode()
+    {
+        isEditable = !isEditable;
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Handles the main button click event
+    /// Either saves changes or enables edit mode
+    /// </summary>
+    /// <returns>
+    /// A task representing the asynchronous operation.
+    /// Saves data if in edit mode, then toggles mode.
+    /// </returns>
+    private async Task HandleButtonClick()
+    {
+        if (isEditable)
+        {
+            await HandleValidSubmit();
+        }
+        ToggleEditMode();
+    }
+
+    /// <summary>
+    /// Saves the updated user data to the database
+    /// Shows temporary success or error messages
+    /// </summary>
+    /// <param name="user">The user object containing updated data</param>
+    /// <returns>
+    /// A task representing the asynchronous operation.
+    /// Shows success/error message for 2 seconds.
+    /// </returns>
+    public async Task SaveUserData(User user)
+    {
+        try
+        {
+            await userService.UpdateUser(user);
+            saveMessage = "Ændringerne er blevet gemt.";
+            StateHasChanged();
+
+            // Reset the message after 2 seconds
+            await Task.Delay(2000);
+            saveMessage = string.Empty;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            saveMessage = "Der opstod en fejl under gemning.";
+            StateHasChanged();
+
+            // Reset the message after 2 seconds
+            await Task.Delay(2000);
+            saveMessage = string.Empty;
+            StateHasChanged();
+        }
+    }
+ } 

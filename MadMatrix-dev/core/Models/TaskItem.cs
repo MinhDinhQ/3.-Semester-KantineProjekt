@@ -1,0 +1,26 @@
+namespace core.Models
+{
+    public class TaskItem
+    {
+        public int Id { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public TaskStatus Status { get; set; } = TaskStatus.NotStarted; // Default to NotStarted
+        
+        public DateTime Date { get; set; } = DateTime.Today;
+
+        public TimeOnly StartTime { get; set; }
+        public TimeOnly EndTime { get; set; }
+        public List<int> EventIds { get; set; } 
+        public DateTime UpdatedAt { get; set; } = DateTime.Now; // Default to current date
+        public List<int> AssignedToIds { get; set; } = new List<int>();     
+    }
+
+    public enum TaskStatus
+    {
+        NotStarted,
+        InProgress,
+        Completed
+    }
+}
+

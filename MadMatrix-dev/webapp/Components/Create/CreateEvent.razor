@@ -1,0 +1,125 @@
+@using webapp.Service
+@inject IEventService EventService
+@inject ILocationService LocationService
+
+<EditForm Model="NewEvent" OnValidSubmit="CreateEventNow" class="card" style="margin: 5px auto; border: none; box-shadow: none">
+
+    <h4 class="text-left" style="margin-bottom: 10px">Opret Event</h4>
+    
+<div style="width: 100%">
+    <div class="form-group">
+        <label for="Title">Titel</label>
+        <InputText id="Title" class="form-control" @bind-Value="NewEvent.Title" placeholder="Indtast Titel" />
+    </div>
+
+    <div class="form-group">
+        <label for="Date">Dato</label>
+        <InputDate id="Date" class="form-control" @bind-Value="NewEvent.DateForEvent" />
+    </div>
+
+    <div class="form-group">
+        <label for="Location">Lokation</label>
+        <InputSelect id="Location" class="form-control" @bind-Value="NewEvent.LocationId">
+            <option value="0">Vælg Lokation</option>
+            @foreach (var location in Locations)
+            {
+            <option value="@location.Id">@location.Name</option>
+            }
+        </InputSelect>
+    </div>
+
+    <div class="form-group">
+        <label for="FoodChoice">Madvalg</label>
+        <InputText id="FoodChoice" class="form-control" @bind-Value="NewEvent.FoodChoices" placeholder="Indtast madvalg" />
+    </div>
+
+    <div class="form-group">
+        <label for="SpecialRequest">Særlige mad behov</label>
+        <InputText id="SpecialRequest" class="form-control" @bind-Value="NewEvent.SpecialRequest" placeholder="Indtast special ønsker til mad" />
+    </div>
+
+    <div class="form-group">
+        <label for="ByCustomer">Kunde</label>
+        <InputText id="ByCustomer" class="form-control" @bind-Value="NewEvent.ByCustomer" placeholder="Indtast kunde" />
+    </div>
+
+    <div class="form-group">
+        <label for="Participant">Deltagere</label>
+        <InputNumber id="Participant" class="form-control" @bind-Value="NewEvent.Participants" />
+    </div>
+
+    <div class="form-group text-center mt-4">
+        <button type="submit" class="btn btn-primary" style="width: 100%">Opret Event</button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="alert alert-success" style="margin-top: 20px">
+            @successMessage
+        </div>
+    }
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger" style="margin-top: 20px">
+            @errorMessage
+        </div>
+    }
+</div>
+</EditForm>
+
+@code {
+    /// <summary>
+    /// The new event being created
+    /// </summary>
+    private TaskEvent NewEvent = new TaskEvent();
+    private string successMessage = string.Empty;
+    private string errorMessage = string.Empty;
+
+    /// <summary>
+    /// Collection of available locations for the event
+    /// </summary>
+    private IEnumerable<Location> Locations = Enumerable.Empty<Location>();
+    
+    /// <summary>
+    /// Initializes the component by loading all available locations
+    /// </summary>
+    /// <returns>A task representing the asynchronous operation</returns>
+    protected override async Task OnInitializedAsync()
+    {
+        Locations = await LocationService.GetAllLocationsAsync();
+    }
+
+    /// <summary>
+    /// Creates a new event using the EventService
+    /// </summary>
+    /// <returns>
+    /// A task representing the asynchronous operation.
+    /// On success, resets the NewEvent form to blank.
+    /// On failure, logs the error to console.
+    /// </returns>
+    private async Task CreateEventNow()
+    {
+        try
+        {
+            successMessage = string.Empty;
+            errorMessage = string.Empty;
+
+            var isSuccess = await EventService.CreateEventAsync(NewEvent);
+            if (isSuccess)
+            {
+                successMessage = "Eventet blev oprettet!";
+                NewEvent = new TaskEvent();
+            }
+            else
+            {
+                errorMessage = "Eventet kunne ikke oprettes. Prøv igen.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Der opstod en fejl. Prøv igen senere.";
+            Console.WriteLine($"Error creating event: {ex.Message}");
+        }
+    }
+
+}

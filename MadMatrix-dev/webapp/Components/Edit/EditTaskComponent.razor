@@ -1,0 +1,257 @@
+@using core.Models
+@using TaskStatus = core.Models.TaskStatus
+@using webapp.Service
+@using Microsoft.AspNetCore.Components
+@inject ITaskService TaskService
+@inject IUserService UserService
+@inject IEventService EventService
+
+<EditForm Model="EditedTask" OnValidSubmit="SaveEdit" class="card" style="width: 100%; margin: auto; padding: 20px; border: none; box-shadow: none">
+    @if (!string.IsNullOrEmpty(message))
+    {
+        <div class="@messageClass" role="alert">
+            @message
+        </div>
+    }
+
+    <h4 class="text-left" style="margin-bottom: 10px">Rediger Opgave</h4>
+
+    <!-- TASK TITLE FIELD -->
+    <div class="form-group">
+        <label for="TaskTitle" class="form-label">Opgave Titel</label>
+        <InputText id="TaskTitle" class="form-control" @bind-Value="EditedTask.Title" placeholder="Indtast opgave titel" />
+    </div>
+
+    <!-- TASK DESCRIPTION FIELD -->
+    <div class="form-group">
+        <label for="TaskDescription" class="form-label">Beskrivelse</label>
+        <InputText id="TaskDescription" class="form-control" @bind-Value="EditedTask.Description" placeholder="Indtast beskrivelse" />
+    </div>
+
+    <!-- TASK DATE FIELD -->
+    <div class="form-group">
+        <label for="Date" class="form-label">Dato</label>
+        <InputDate id="Date" class="form-control" @bind-Value="EditedTask.Date" />
+    </div>
+
+    <!-- TASK START TIME FIELD -->
+    <div class="form-group">
+        <label for="StartTime" class="form-label">Starttidspunkt</label>
+        <input id="StartTime" type="time" class="form-control" value="@startTimeOnlyValue" @onchange="HandleStartTimeChange" />
+    </div>
+
+    <!-- TASK END TIME FIELD -->
+    <div class="form-group">
+        <label for="EndTime" class="form-label">Sluttidspunkt</label>
+        <input id="EndTime" type="time" class="form-control" value="@endTimeOnlyValue" @onchange="HandleEndTimeChange" />
+    </div>
+
+    <!-- TASK STATUS FIELD -->
+    <div class="form-group">
+        <label class="form-label">Status</label>
+        <InputSelect id="TaskStatus" class="form-control" @bind-Value="EditedTask.Status">
+            <option value="">Vælg status</option>
+            @foreach (var status in Enum.GetValues(typeof(TaskStatus)))
+            {
+            <option value="@status">@status</option>
+            }
+        </InputSelect>
+    </div>
+
+    <!-- ASSIGN WORKERS BASED ON SELECTED COMPETENCY -->
+    <div class="form-group" style="border: 1px solid #ddd; padding: 10px;">
+        <label class="form-label">Tildel Medarbejdere</label>
+        @if (isLoading)
+        {
+        <div>Loading users...</div>
+        }
+        else
+        {
+        @foreach (var user in _users)
+        {
+        <div class="form-check">
+            <input type="checkbox" class="form-check-input" @onchange="@(e => ToggleUserSelection(user.Id))" checked="@(EditedTask.AssignedToIds.Contains(user.Id))" id="@($"user_{user.Id}")" />
+            <label class="form-check-label" for="@($"user_{user.Id}")">@user.FirstName @user.LastName</label>
+        </div>
+        }
+        }
+    </div>
+
+    <!-- BUTTONS -->
+    <div class="form-group text-center mt-4">
+        <button type="button" class="btn btn-secondary me-2" data-bs-dismiss="modal">Annuller</button>
+        <button type="submit" class="btn btn-primary" data-bs-dismiss="modal">Gem Ændringer</button>
+    </div>
+
+</EditForm>
+
+@code {
+    /// <summary>
+    /// The ID of the task being edited.
+    /// Passed as a parameter from the parent component.
+    /// </summary>
+    [Parameter]
+    public int TaskId { get; set; }
+
+    /// <summary>
+    /// The task being edited, containing all editable properties.
+    /// Initialized with an empty list for assigned users.
+    /// </summary>
+    private TaskItem EditedTask { get; set; } = new() { AssignedToIds = new List<int>() };
+
+    /// <summary>
+    /// Collection of all available users that can be assigned to the task.
+    /// Loaded when the component initializes.
+    /// </summary>
+    private List<User> _users = new();
+
+    /// <summary>
+    /// Indicates whether the component is currently loading data.
+    /// Used to show/hide loading indicators in the UI.
+    /// </summary>
+    private bool isLoading = true;
+                                                                                                                                                                                                                                                                                                                                                                            
+    /// <summary>
+    /// Loads the task data and available users when the component parameters change.
+    /// Fetches the task details using the provided TaskId and populates the edit form.
+    /// </summary>
+    /// <returns>A task representing the asynchronous operation</returns>
+    protected override async Task OnParametersSetAsync()
+    {
+         try                                                                                                                                                                                                                                                                                                                                                                
+         {                                                                                                                                                                                                                                                                                                                                                                  
+             isLoading = true;                                                                                                                                                                                                                                                                                                                                              
+             var task = await TaskService.GetTaskAsync(TaskId);                                                                                                                                                                                                                                                                                                             
+             if (task != null)                                                                                                                                                                                                                                                                                                                                              
+             {                                                                                                                                                                                                                                                                                                                                                              
+                 EditedTask = task;                                                                                                                                                                                                                                                                                                                                         
+             }                                                                                                                                                                                                                                                                                                                                                              
+             _users = await UserService.LoadUsers();                                                                                                                                                                                                                                                                                                                        
+         }                                                                                                                                                                                                                                                                                                                                                                  
+         catch (Exception ex)                                                                                                                                                                                                                                                                                                                                               
+         {                                                                                                                                                                                                                                                                                                                                                                  
+             Console.WriteLine($"Error loading task: {ex.Message}");                                                                                                                                                                                                                                                                                                        
+         }                                                                                                                                                                                                                                                                                                                                                                  
+         finally                                                                                                                                                                                                                                                                                                                                                            
+         {                                                                                                                                                                                                                                                                                                                                                                  
+             isLoading = false;                                                                                                                                                                                                                                                                                                                                             
+         }                                                                                                                                                                                                                                                                                                                                                                  
+     }                                                                                                                                                                                                                                                                                                                                                                      
+                                                                                                                                                                                                                                                                                                                                                                            
+    /// <summary>
+    /// Callback event triggered when the task is successfully saved.
+    /// Used to notify the parent component to refresh its data.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnSaveCompleted { get; set; }
+
+    private string? message;
+    private string? messageClass;
+
+    /// <summary>
+    /// Saves the edited task using the TaskService.
+    /// Triggers the OnSaveCompleted callback on success.
+    /// </summary>
+    /// <returns>
+    /// A task representing the asynchronous operation.
+    /// On success, invokes OnSaveCompleted.
+    /// On failure, logs the error to console.
+    /// </returns>
+    private async Task SaveEdit()
+    {
+         try                                                                                                                                                                                                                                                                                                                                                                
+         {        
+             // Ensure the date is set to noon to avoid timezone issues
+             EditedTask.Date = EditedTask.Date.Date.AddHours(12);
+                                                                                                                                                                                                                                                                                                                                                          
+             var success = await TaskService.EditTaskAsync(TaskId, EditedTask);                                                                                                                                                                                                                                                                                             
+             if (success)                                                                                                                                                                                                                                                                                                                                                   
+             {                                                                                                                                                                                                                                                                                                                                                              
+                 message = "Opgave blev gemt succesfuldt!";
+                 messageClass = "alert alert-success";
+                 await OnSaveCompleted.InvokeAsync();                                                                                                                                                                                                                                                                                                                       
+             }                                                                                                                                                                                                                                                                                                                                                              
+         }                                                                                                                                                                                                                                                                                                                                                                  
+         catch (Exception ex)                                                                                                                                                                                                                                                                                                                                               
+         {                                                                                                                                                                                                                                                                                                                                                                  
+             message = "Fejl ved gemning af opgave";
+             messageClass = "alert alert-danger";
+             Console.WriteLine($"Error saving task: {ex.Message}");                                                                                                                                                                                                                                                                                                         
+         }                                                                                                                                                                                                                                                                                                                                                                  
+     }                                                                                                                                                                                                                                                                                                                                                                      
+                                                                                                                                                                                                                                                                                                                                                                            
+    /// <summary>
+    /// Gets or sets the start time as a string in HH:mm format.
+    /// Converts between TimeOnly and string representations.
+    /// </summary>
+    private string? startTimeOnlyValue
+    {
+         get => EditedTask.StartTime.ToString("HH:mm");                                                                                                                                                                                                                                                                                                                     
+         set                                                                                                                                                                                                                                                                                                                                                                
+         {                                                                                                                                                                                                                                                                                                                                                                  
+             if (value != null && TimeOnly.TryParse(value, out var parsedTime))                                                                                                                                                                                                                                                                                             
+             {                                                                                                                                                                                                                                                                                                                                                              
+                 EditedTask.StartTime = parsedTime;                                                                                                                                                                                                                                                                                                                         
+             }                                                                                                                                                                                                                                                                                                                                                              
+         }                                                                                                                                                                                                                                                                                                                                                                  
+     }                                                                                                                                                                                                                                                                                                                                                                      
+                                                                                                                                                                                                                                                                                                                                                                            
+    /// <summary>
+    /// Handles changes to the start time input.
+    /// Parses the input string and updates the EditedTask's StartTime.
+    /// </summary>
+    /// <param name="args">Event arguments containing the new time value</param>
+    private void HandleStartTimeChange(ChangeEventArgs args)
+    {
+         if (args.Value is string timeValue && TimeOnly.TryParse(timeValue, out var parsedTime))                                                                                                                                                                                                                                                                            
+         {                                                                                                                                                                                                                                                                                                                                                                  
+             EditedTask.StartTime = parsedTime;                                                                                                                                                                                                                                                                                                                             
+         }                                                                                                                                                                                                                                                                                                                                                                  
+     }                                                                                                                                                                                                                                                                                                                                                                      
+                                                                                                                                                                                                                                                                                                                                                                            
+    /// <summary>
+    /// Gets or sets the end time as a string in HH:mm format.
+    /// Converts between TimeOnly and string representations.
+    /// </summary>
+    private string? endTimeOnlyValue
+    {
+         get => EditedTask.EndTime.ToString("HH:mm");                                                                                                                                                                                                                                                                                                                       
+         set                                                                                                                                                                                                                                                                                                                                                                
+         {                                                                                                                                                                                                                                                                                                                                                                  
+             if (value != null && TimeOnly.TryParse(value, out var parsedTime))                                                                                                                                                                                                                                                                                             
+             {                                                                                                                                                                                                                                                                                                                                                              
+                 EditedTask.EndTime = parsedTime;                                                                                                                                                                                                                                                                                                                           
+             }                                                                                                                                                                                                                                                                                                                                                              
+         }                                                                                                                                                                                                                                                                                                                                                                  
+     }                                                                                                                                                                                                                                                                                                                                                                      
+                                                                                                                                                                                                                                                                                                                                                                            
+    /// <summary>
+    /// Handles changes to the end time input.
+    /// Parses the input string and updates the EditedTask's EndTime.
+    /// </summary>
+    /// <param name="args">Event arguments containing the new time value</param>
+    private void HandleEndTimeChange(ChangeEventArgs args)
+    {
+         if (args.Value is string timeValue && TimeOnly.TryParse(timeValue, out var parsedTime))                                                                                                                                                                                                                                                                            
+         {                                                                                                                                                                                                                                                                                                                                                                  
+             EditedTask.EndTime = parsedTime;                                                                                                                                                                                                                                                                                                                               
+         }                                                                                                                                                                                                                                                                                                                                                                  
+     }                                                                                                                                                                                                                                                                                                                                                                      
+                                                                                                                                                                                                                                                                                                                                                                            
+    /// <summary>
+    /// Toggles the selection of a user for task assignment.
+    /// Adds or removes the user's ID from the AssignedToIds list.
+    /// </summary>
+    /// <param name="userId">The ID of the user to toggle selection for</param>
+    private void ToggleUserSelection(int userId)
+    {
+         if (EditedTask.AssignedToIds.Contains(userId))                                                                                                                                                                                                                                                                                                                     
+         {                                                                                                                                                                                                                                                                                                                                                                  
+             EditedTask.AssignedToIds.Remove(userId);                                                                                                                                                                                                                                                                                                                       
+         }                                                                                                                                                                                                                                                                                                                                                                  
+         else                                                                                                                                                                                                                                                                                                                                                               
+         {                                                                                                                                                                                                                                                                                                                                                                  
+             EditedTask.AssignedToIds.Add(userId);                                                                                                                                                                                                                                                                                                                          
+         }                                                                                                                                                                                                                                                                                                                                                                  
+     }                                                                                                                                                                                                                                                                                                                                                                      
+ }

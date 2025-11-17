@@ -1,0 +1,43 @@
+<div class="modal fade" id="@ModalId" tabindex="-1" aria-labelledby="@($"{ModalId}Label")" aria-hidden="true">
+    <div class="modal-dialog @ModalSize">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                @ChildContent
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    /// <summary>
+    /// Unique identifier for the modal dialog.
+    /// Used to target the modal with Bootstrap's JavaScript API.
+    /// </summary>
+    [Parameter]
+    public string ModalId { get; set; } = "";
+
+    /// <summary>
+    /// CSS class that controls the modal's size.
+    /// Default value is "modal-lg". Other options include "modal-sm", "modal-xl".
+    /// </summary>
+    [Parameter]
+    public string ModalSize { get; set; } = "modal-lg";
+
+    /// <summary>
+    /// Determines whether to show the modal footer.
+    /// Currently not implemented in the template.
+    /// </summary>
+    [Parameter]
+    public bool ShowFooter { get; set; } = false;
+
+    /// <summary>
+    /// The content to be displayed in the modal body.
+    /// Supports "arbitrary Blazor content" through RenderFragment.
+    /// </summary>
+    /// https://learn.microsoft.com/en-us/aspnet/core/blazor/components/templated-components?view=aspnetcore-9.0 
+    [Parameter]
+    public RenderFragment ChildContent { get; set; }
+}

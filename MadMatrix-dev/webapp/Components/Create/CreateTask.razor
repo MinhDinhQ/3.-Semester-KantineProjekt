@@ -1,0 +1,328 @@
+@using core.Models
+@using TaskStatus = core.Models.TaskStatus
+@using webapp.Service
+@using webapp.Service.LoginService
+@inject ITaskService TaskService
+@inject IUserService UserService
+@inject ILoginService LoginService
+@inject IEventService EventService
+
+<EditForm Model="NewTask" OnValidSubmit="CommitTask" class="card announcement-card" style="margin: 5px auto; border: none; box-shadow: none">
+    <div style="width: 100%">
+        <h4 class="text-left" style="margin-bottom: 10px">Opret Opgave</h4>
+
+        <!-- TASK TITLE FIELD -->
+        <div class="form-group">
+            <label for="TaskTitle" class="form-label">Opgave Titel</label>
+            <InputText id="TaskTitle" class="form-control" @bind-Value="NewTask.Title" placeholder="Indtast opgave titel" />
+        </div>
+
+        <!-- TASK DESCRIPTION FIELD -->
+        <div class="form-group">
+            <label for="TaskDescription" class="form-label">Beskrivelse</label>
+            <InputText id="TaskDescription" class="form-control" @bind-Value="NewTask.Description" placeholder="Indtast beskrivelse" />
+        </div>
+
+        <!-- TASK DATE FIELD -->
+        <div class="form-group">
+            <label for="Date" class="form-label">Dato</label>
+            <InputDate @bind-Value="NewTask.Date" class="form-control" id="Date" />
+        </div>
+
+        <!-- TASK START TIME FIELD -->
+        <div class="form-group">
+            <label for="StartTime" class="form-label">Starttidspunkt</label>
+            <input id="StartTime" type="time" class="form-control"
+                   value="@startTimeOnlyValue"
+                   @onchange="HandleStartTimeChange" />
+        </div>
+
+        <!-- TASK END TIME FIELD -->
+        <div class="form-group">
+            <label for="EndTime" class="form-label">Sluttidspunkt</label>
+            <input id="EndTime" type="time" class="form-control"
+                   value="@endTimeOnlyValue"
+                   @onchange="HandleEndTimeChange" />
+        </div>
+
+        <!-- TASK STATUS FIELD -->
+        <div class="form-group">
+            <label class="form-label">Status</label>
+            <InputSelect class="form-control" @bind-Value="NewTask.Status">
+                <option value="">Vælg status</option>
+                @foreach (var status in Enum.GetValues(typeof(TaskStatus)))
+                {
+                    <option value="@status">@status</option>
+                }
+            </InputSelect>
+        </div>
+
+        <!-- ASSIGN WORKERS -->
+        <label style="font-weight: bold; margin-bottom: 10px; margin-top: 10px">Tildel Medarbejdere</label>
+        <div class="form-worker" style="border: 1px solid #ececec; padding: 10px; border-radius: 5px; background-color: lightgrey">
+            @if (isLoading)
+            {
+                <div>Loading users...</div>
+            }
+            else
+            {
+                @foreach (var user in _users)
+                {
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" 
+                               @onchange="@(e => ToggleUserSelection(user.Id))" 
+                               checked="@(NewTask.AssignedToIds.Contains(user.Id))" 
+                               id="@($"user_{user.Id}")" 
+                               @onclick="(() => ShowUserCompetencies(user.Id))" />
+                        <label class="form-check-label" for="@($"user_{user.Id}")">@user.FirstName @user.LastName</label>
+                    </div>
+                }
+            }
+        </div>
+
+        <!-- DISPLAY COMPETENCIES -->
+        @if (SelectedUserCompetencies?.Any() == true)
+        {
+            <div class="competencies-section" style="margin-top: 20px; border: 1px solid #ddd; padding: 10px; background-color: #f9f9f9; border-radius: 5px;">
+                <h5>Kompetencer</h5>
+                <ul>
+                    @foreach (var competency in SelectedUserCompetencies)
+                    {
+                        <li>@competency.ToString()</li> <!-- Displaying enum as string -->
+                    }
+                </ul>
+            </div>
+        }
+        else if (SelectedUserCompetencies != null)
+        {
+            <div class="competencies-section" style="margin-top: 20px;">
+                <em>Ingen kompetencer fundet for denne bruger.</em>
+            </div>
+        }
+
+        <!-- SELECT EVENTS (MULTIPLE EVENTS SELECTION) -->
+        <label style="font-weight: bold; margin-bottom: 10px; margin-top: 10px;" >Vælg Events</label>
+        <div class="form-worker" style="border: 1px solid #ddd; padding: 10px;">
+            @if (isLoading)
+            {
+                <div>Loading events...</div>
+            }
+            else
+            {
+                @foreach (var eventItem in _events)
+                {
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" 
+                               @onchange="@(e => ToggleEventSelection(eventItem.Id))" 
+                               checked="@(NewTask.EventIds.Contains(eventItem.Id))" 
+                               id="@($"event_{eventItem.Id}")" />
+                        <label class="form-check-label" for="@($"event_{eventItem.Id}")">@eventItem.Title</label>
+                    </div>
+                }
+            }
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="margin-top: 20px; width: 100%">Opret Opgave</button>
+        
+        @if (!string.IsNullOrEmpty(successMessage))
+        {
+            <div class="alert alert-success" style="margin-top: 20px">
+                @successMessage
+            </div>
+        }
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="alert alert-danger" style="margin-top: 20px">
+                @errorMessage
+            </div>
+        }
+    </div>
+</EditForm>
+
+@code {
+    /// <summary>
+    /// The new task being created, initialized with empty lists for assigned users and events
+    /// </summary>
+    private TaskItem NewTask { get; set; } = new() { AssignedToIds = new List<int>(), EventIds = new List<int>() };
+
+    /// <summary>
+    /// Collection of all available users that can be assigned to tasks
+    /// </summary>
+    private List<User> _users = new();
+
+    /// <summary>
+    /// Collection of all available events that can be linked to tasks
+    /// </summary>
+    private List<TaskEvent> _events = new();
+
+    /// <summary>
+    /// Indicates whether the component is loading data
+    /// </summary>
+    private bool isLoading = true;
+
+    /// <summary>
+    /// Stores the competencies of the currently selected user
+    /// </summary>
+    private List<Competency>? SelectedUserCompetencies { get; set; }
+
+    /// <summary>
+    /// Initializes the component by loading all users and events
+    /// </summary>
+    /// <returns>A task representing the asynchronous operation</returns>
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            isLoading = true;
+            _users = await UserService.LoadUsers();  // Load all users
+            _events = await EventService.GetAllEventsAsync();  // Load all events
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading data: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    /// <summary>
+    /// Toggles the selection of a user for task assignment
+    /// </summary>
+    /// <param name="userId">The ID of the user to toggle selection for</param>
+    private void ToggleUserSelection(int userId)
+    {
+        if (NewTask.AssignedToIds.Contains(userId))
+        {
+            NewTask.AssignedToIds.Remove(userId);  // Unassign user
+        }
+        else
+        {
+            NewTask.AssignedToIds.Add(userId);  // Assign user
+        }
+    }
+
+    /// <summary>
+    /// Displays the competencies for a selected user
+    /// </summary>
+    /// <param name="userId">The ID of the user whose competencies should be shown</param>
+    private void ShowUserCompetencies(int userId)
+    {
+        // Find the selected user
+        var selectedUser = _users.FirstOrDefault(u => u.Id == userId);
+        if (selectedUser != null)
+        {
+            SelectedUserCompetencies = selectedUser.Competencies;
+        }
+    }
+
+    /// <summary>
+    /// Toggles the selection of an event for the task
+    /// </summary>
+    /// <param name="eventId">The ID of the event to toggle selection for</param>
+    private void ToggleEventSelection(int eventId)
+    {
+        if (NewTask.EventIds.Contains(eventId))
+        {
+            NewTask.EventIds.Remove(eventId);  // Unselect event
+        }
+        else
+        {
+            NewTask.EventIds.Add(eventId);  // Select event
+        }
+    }
+
+    private string successMessage = string.Empty;
+    private string errorMessage = string.Empty;
+
+    /// <summary>
+    /// Creates a new task using the TaskService
+    /// </summary>
+    /// <returns>
+    /// A task representing the asynchronous operation.
+    /// On success, resets the form and clears selections.
+    /// On failure, displays error message.
+    /// </returns>
+    private async Task CommitTask()
+    {
+        try
+        {
+            successMessage = string.Empty;
+            errorMessage = string.Empty;
+
+            var isSuccess = await TaskService.CreateTaskAsync(NewTask);
+            if (isSuccess)
+            {
+                successMessage = "Opgaven blev oprettet!";
+                
+                // Reset the form after successful submission
+                NewTask = new() { AssignedToIds = new List<int>(), EventIds = new List<int>() };
+                SelectedUserCompetencies = null;
+            }
+            else
+            {
+                errorMessage = "Opgaven kunne ikke oprettes. Prøv igen.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Der opstod en fejl. Prøv igen senere.";
+            Console.WriteLine($"Error creating task: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the start time as a string in HH:mm format
+    /// </summary>
+    private string? startTimeOnlyValue
+    {
+        get => NewTask.StartTime.ToString("HH:mm");
+        set
+        {
+            if (value != null && TimeOnly.TryParse(value, out var parsedTime))
+            {
+                NewTask.StartTime = parsedTime;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Handles changes to the start time input
+    /// </summary>
+    /// <param name="args">Event arguments containing the new time value</param>
+    private void HandleStartTimeChange(ChangeEventArgs args)
+    {
+        if (args.Value is string timeValue && TimeOnly.TryParse(timeValue, out var parsedTime))
+        {
+            NewTask.StartTime = parsedTime;
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the end time as a string in HH:mm format
+    /// </summary>
+    private string? endTimeOnlyValue
+    {
+        get => NewTask.EndTime.ToString("HH:mm");
+        set
+        {
+            if (value != null && TimeOnly.TryParse(value, out var parsedTime))
+            {
+                NewTask.EndTime = parsedTime;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Handles changes to the end time input
+    /// </summary>
+    /// <param name="args">Event arguments containing the new time value</param>
+    private void HandleEndTimeChange(ChangeEventArgs args)
+    {
+        if (args.Value is string timeValue && TimeOnly.TryParse(timeValue, out var parsedTime))
+        {
+            NewTask.EndTime = parsedTime;
+        }
+    }
+}

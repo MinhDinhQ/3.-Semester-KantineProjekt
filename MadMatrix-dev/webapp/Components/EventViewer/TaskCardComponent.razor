@@ -1,0 +1,192 @@
+﻿@using webapp.Service
+@using TaskStatus = core.Models.TaskStatus
+@inject IUserService UserService
+@inject ITaskService TaskService
+
+<div class="card task-card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="card-title mb-0">@Title</h5>
+        <span class="badge badge-@Status" style="min-width: 100px; text-align: center">@Status</span>
+    </div>
+    
+    @if (ShowData == true)
+    {
+        <div class="card-body">
+            <div class="task-info">
+                <div class="info-row">
+                    <i class="bi bi-clock text-primary"></i>
+                    <span><strong>Start:</strong> @StartTime</span>
+                </div>
+                <div class="info-row">
+                    <i class="bi bi-clock-history text-primary"></i>
+                    <span><strong>Slut:</strong> @EndTime</span>
+                </div>
+            </div>
+            
+            <div class="mt-3">
+                <h6 class="mb-2"><i class="bi bi-people-fill text-primary me-2"></i>Tildelte Medarbejdere:</h6>
+                <div class="assigned-users">
+                    @foreach (var id in @AssignedTo)
+                    {
+                        <UserViewerComponent userId="@id"/>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@if (ShowDescription == true)
+{
+    <div class="card mt-3">
+        <div class="card-body">
+            <h6 class="mb-3"><i class="bi bi-people-fill text-primary me-2"></i>Tildelte Medarbejdere:</h6>
+            <div class="assigned-users mb-3">
+                @foreach (var id in @AssignedTo)
+                {
+                    <UserViewerComponent userId="@id"/>
+                }
+            </div>
+            
+            <div class="description-section">
+                <h6 class="mb-2"><i class="bi bi-card-text text-primary me-2"></i>Beskrivelse:</h6>
+                <p class="card-text">@Description</p>
+            </div>
+
+            <div class="status-section mt-3">
+                <label class="form-label" for="taskStatusDropdown"><i class="bi bi-toggle2-on text-primary me-2"></i>Status:</label>
+                <select class="form-select" id="taskStatusDropdown" value="@_localStatus" @onchange="OnStatusChanged">
+                    @foreach (var status in Enum.GetValues(typeof(TaskStatus)).Cast<TaskStatus>())
+                    {
+                        <option value="@status">@status</option>
+                    }
+                </select>
+            </div>
+        </div>
+    </div>
+
+
+
+@code {
+    /// <summary>
+    /// The unique identifier of the task being displayed
+    /// </summary>
+    [Parameter] public int taskId { get; set; }
+
+    /// <summary>
+    /// The title of the task to display
+    /// </summary>
+    [Parameter] public string Title { get; set; }
+
+    /// <summary>
+    /// The detailed description of the task
+    /// </summary>
+    [Parameter] public string Description { get; set; }
+
+    /// <summary>
+    /// The current status of the task
+    /// </summary>
+    [Parameter] public TaskStatus Status { get; set; }
+
+    /// <summary>
+    /// Callback triggered when the task status changes
+    /// </summary>
+    [Parameter] public EventCallback<TaskStatus> StatusChanged { get; set; }
+
+    /// <summary>
+    /// Callback triggered when task status is updated, providing both task ID and new status
+    /// </summary>
+    [Parameter] public EventCallback<(int taskId, core.Models.TaskStatus newStatus)> OnTaskStatusUpdated { get; set; }
+
+    /// <summary>
+    /// Local tracking of task status for immediate UI updates
+    /// </summary>
+    private TaskStatus _localStatus;
+
+    /// <summary>
+    /// Initializes the local status tracking when the component is first created
+    /// </summary>
+    protected override void OnInitialized()
+    {
+        _localStatus = Status;
+    }
+
+    /// <summary>
+    /// Updates the local status tracking when component parameters change
+    /// </summary>
+    protected override void OnParametersSet()
+    {
+        _localStatus = Status;
+    }
+
+    /// <summary>
+    /// The date when the task is scheduled
+    /// </summary>
+    [Parameter] public DateTime Dato { get; set; }
+
+    /// <summary>
+    /// The start time of the task
+    /// </summary>
+    [Parameter] public TimeOnly StartTime { get; set; }
+
+    /// <summary>
+    /// The end time of the task
+    /// </summary>
+    [Parameter] public TimeOnly EndTime { get; set; }
+
+    /// <summary>
+    /// List of user IDs assigned to this task
+    /// </summary>
+    [Parameter] public List<int> AssignedTo { get; set; }
+
+    /// <summary>
+    /// Controls whether to show the task description
+    /// Defaults to false
+    /// </summary>
+    [Parameter] public bool? ShowDescription { get; set; } = false;
+
+    /// <summary>
+    /// Controls whether to show additional task data
+    /// Defaults to false
+    /// </summary>
+    [Parameter] public bool? ShowData { get; set; } = false;
+
+    
+    
+    /// <summary>
+    /// Handles changes to the task status dropdown
+    /// Updates both local state and persists changes to the server
+    /// </summary>
+    /// <param name="e">Event arguments containing the new status value</param>
+    /// <returns>
+    /// A task representing the asynchronous operation.
+    /// On success, updates local state and triggers callbacks.
+    /// On failure, reverts to previous status.
+    /// </returns>
+    private async Task OnStatusChanged(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<TaskStatus>(e.Value?.ToString(), out var newStatus))
+        {
+            _localStatus = newStatus; // Update local status immediately
+            StateHasChanged();
+
+            var success = await TaskService.UpdateTaskStatus(taskId, newStatus);
+
+            if (success)
+            {
+                Status = newStatus;
+                await StatusChanged.InvokeAsync(newStatus);
+                await OnTaskStatusUpdated.InvokeAsync((taskId, newStatus));
+                Console.WriteLine($"Task {taskId} status updated to {newStatus}");
+            }
+            else
+            {
+                _localStatus = Status; // Revert local status on failure
+                Console.WriteLine($"Failed to update task {taskId}");
+                StateHasChanged();
+            }
+        }
+    }
+}
+
+    }

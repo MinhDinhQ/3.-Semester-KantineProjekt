@@ -1,0 +1,125 @@
+@using core.Models 
+@using webapp.Service 
+@inject IUserService UserService 
+@inject NavigationManager NavigationManager
+
+<!-- Form for creating a new user -->
+
+<div style="margin-left: 20px; margin-right: 20px">
+<div class="container mt-4">
+    <h3>Opret ny bruger</h3>
+    <EditForm Model="@registerModel" OnValidSubmit="@HandleValidSubmit">
+        
+        <div class="mb-3">
+            <label for="firstName" class="form-label">Fornavn</label>
+            <InputText id="firstName" class="form-control" @bind-Value="registerModel.FirstName" />
+            
+        </div>
+        <div class="mb-3">
+            <label for="lastName" class="form-label">Efternavn</label>
+            <InputText id="lastName" class="form-control" @bind-Value="registerModel.LastName" />
+            
+        </div>
+        <div class="mb-3">
+            <label for="email" class="form-label">Email</label>
+            <InputText id="email" class="form-control" @bind-Value="registerModel.Email" />
+            
+        </div>
+        <div class="mb-3">
+            <label for="password" class="form-label">Adgangskode</label>
+            <InputText id="password" type="password" class="form-control" @bind-Value="registerModel.Password" />
+            
+        </div>
+        <div class="mb-3">
+            <label for="phoneNumber" class="form-label">Telefonnummer</label>
+            <InputText id="phoneNumber" class="form-control" @bind-Value="registerModel.PhoneNumber" />
+            
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Kompetencer</label>
+            @{
+                // Generate checkboxes for all enum values of Competency                                                                                                                                                                                                                                                                                                           
+                var competencies = Enum.GetValues(typeof(Competency));
+                for (int i = 0; i < competencies.Length; i++)
+                {
+                    var competency = competencies.GetValue(i);
+                    var index = i; // Capture index for binding checkbox state                                                                                                                                                                                                                                                                                                     
+                    <div class="Compentency-checkbox">
+                
+                        <!-- Checkbox for each competency -->
+                        <InputCheckbox class="form-check-input"
+                                       @bind-Value="competencyValues[index]"
+                                       id="@($"competency_{competency}")"/>
+                
+                        <label class="form-check-label" for="@($"competency_{competency}")">
+                            @competency <!-- Display competency name -->
+                        </label>
+                    </div>
+                }
+            }
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 20px; margin-bottom: 50px">Opret konto</button>
+    </EditForm>
+    
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger mt-3">
+            @errorMessage
+        </div>
+    }
+</div>
+</div>
+
+@code {
+    /// <summary>
+    /// Model containing the registration form data for a new user
+    /// </summary>
+    private RegisterDto registerModel = new();
+
+    /// <summary>
+    /// Stores error messages during the registration process
+    /// </summary>
+    private string errorMessage = string.Empty;
+
+    /// <summary>
+    /// Tracks the selection state of each competency checkbox
+    /// Each index corresponds to an enum value in the Competency type
+    /// </summary>
+    private bool[] competencyValues = new bool[Enum.GetValues(typeof(Competency)).Length];
+
+    /// <summary>
+    /// Handles the submission of the registration form
+    /// </summary>
+    /// <returns>
+    /// A task representing the asynchronous operation.
+    /// On success, navigates to the dashboard.
+    /// On failure, sets an error message.
+    /// </returns>
+    private async Task HandleValidSubmit()
+    {
+        try
+        {
+        // Convert selected competencies (from checkboxes) to a list in the RegisterDto
+        registerModel.Competencies = new List<Competency>();
+        var competencies = Enum.GetValues(typeof(Competency));
+        for (int i = 0; i < competencyValues.Length; i++)
+        {
+            if (competencyValues[i])
+            {
+                // Add the competency to the list if the checkbox is checked
+                registerModel.Competencies.Add((Competency)competencies.GetValue(i)!);
+            }
+            }
+        // Register the user via the service layer
+            var user = await UserService.RegisterUser(registerModel);
+
+        // Navigate to the dashboard page on success
+            NavigationManager.NavigateTo("/dashboard");
+            }
+        catch (Exception ex)
+        {
+        // Handle and display any errors during registration
+            errorMessage = $"An error occurred: {ex.Message}";
+        }
+    }   
+}

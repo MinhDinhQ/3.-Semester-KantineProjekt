@@ -1,0 +1,205 @@
+@page "/eventviewer/{EventId:int}"
+@using webapp.Service
+@using webapp.Components.EventViewer
+@inject NavigationManager NavigationManager
+@inject IEventService EventService
+@inject ITaskService TaskService
+@inject ILocationService LocationService
+
+<div class="container-fluid py-4">
+    <nav class="navbar navbar-light bg-white shadow-sm rounded mb-4">
+        <div class="container-fluid">
+            <span class="navbar-brand mb-0 h1">
+                <i class="bi bi-calendar-event me-2"></i>Event Oversigtsplan
+            </span>
+            <button class="btn btn-outline-primary" @onclick="NavigateToEvents">
+                <i class="bi bi-arrow-left me-2"></i>Gå tilbage
+            </button>
+        </div>
+    </nav>
+
+@if (_currentEvent == null)
+{
+    <div class="d-flex justify-content-center align-items-center" style="height: 200px;">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else
+{
+    <div class="event-grid">    
+        <div class="event-details information-pane">
+            <div class="card h-100">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Event Detajler</h5>
+                </div>
+                <div class="card-body">
+                    <h4 class="card-title mb-4">@_currentEvent.Title</h4>
+                    <div class="event-info">
+                        <div class="info-item">
+                            <i class="bi bi-geo-alt text-primary"></i>
+                            <span><strong>Lokation:</strong> @(_currentLocation?.Name)</span>
+                        </div>
+                        <div class="info-item">
+                            <i class="bi bi-calendar text-primary"></i>
+                            <span><strong>Dato:</strong> @_currentEvent.DateForEvent</span>
+                        </div>
+                        <div class="info-item">
+                            <i class="bi bi-person text-primary"></i>
+                            <span><strong>Kunde:</strong> @_currentEvent.ByCustomer</span>
+                        </div>
+                        <div class="info-item">
+                            <i class="bi bi-cup-hot text-primary"></i>
+                            <span><strong>Madvalg:</strong> @_currentEvent.FoodChoices</span>
+                        </div>
+                        <div class="info-item">
+                            <i class="bi bi-chat-left-text text-primary"></i>
+                            <span><strong>Specielle Behov:</strong> @_currentEvent.SpecialRequest</span>
+                        </div>
+                        <div class="info-item">
+                            <i class="bi bi-people text-primary"></i>
+                            <span><strong>Deltagere:</strong> @_currentEvent.Participants</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="task-overview information-pane">
+            <h5>Opgave oversigt</h5>
+            @foreach (var task in _tasks)
+            {
+                <div class="information-pane" @onclick="() => OpenTask(task.Id)">
+                    <TaskCardComponent ShowData="true" 
+                              Title="@task.Title" 
+                              Description="@task.Description" 
+                              Status="@task.Status" 
+                              AssignedTo="@task.AssignedToIds"
+                              Dato="@task.Date"
+                              StartTime="@task.StartTime" 
+                              EndTime="@task.EndTime"
+                              taskId="@task.Id"
+                              OnTaskStatusUpdated="HandleTaskStatusUpdated"/>
+                </div>
+            }
+        </div>
+        @if (taskId == null)
+        {
+            //don't render, because we don't have a task to display
+            
+        }
+        else
+            // render the task details
+            // need some logic to lookup the ?taskId={taskId} in the _tasks list
+            // //get the taskId from the query string, and find that task in the _tasks list
+            //then use that data to display the task details in the task card
+            @if (taskId != null)
+            {
+                var task = _tasks.FirstOrDefault(task => task.Id == taskId);
+                if (task != null)
+                {
+                    <div class="task-details information-pane">
+                        <TaskCardComponent ShowDescription="true" 
+                                  Title="@task.Title" 
+                                  Description="@task.Description" 
+                                  AssignedTo="@task.AssignedToIds" 
+                                  Dato="@task.Date"
+                                  StartTime="@task.StartTime" 
+                                  EndTime="@task.EndTime"
+                                  Status="@task.Status"
+                                  taskId="@task.Id"
+                                  OnTaskStatusUpdated="HandleTaskStatusUpdated"/>
+                    </div>
+                }
+            }
+    </div>
+    
+}    
+<!-- get all the tasks that has the eventid. kom så jit -->
+</div>
+
+@code {
+    /// <summary>
+    /// The ID of the event being viewed, passed as a route parameter
+    /// </summary>
+    [Parameter] public int EventId { get; set; }
+    
+    /// <summary>
+    /// The ID of the currently selected task, supplied from query parameters
+    /// </summary>
+    [SupplyParameterFromQuery] public int? taskId { get; set; }
+
+    /// <summary>
+    /// The current event being displayed
+    /// </summary>
+    private TaskEvent? _currentEvent;
+
+    /// <summary>
+    /// Location information for the current event
+    /// </summary>
+    private Location? _currentLocation;
+
+    /// <summary>
+    /// List of tasks associated with the current event
+    /// </summary>
+    private List<TaskItem> _tasks = new();
+    
+    /// <summary>
+    /// Handles updates to a task's status
+    /// Updates the local task list and triggers UI refresh
+    /// </summary>
+    /// <param name="update">Tuple containing taskId and new status</param>
+    private async Task HandleTaskStatusUpdated((int taskId, core.Models.TaskStatus newStatus) update)
+    {
+        var taskToUpdate = _tasks.FirstOrDefault(t => t.Id == update.taskId);
+        if (taskToUpdate != null)
+        {
+            taskToUpdate.Status = update.newStatus;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Initializes the component by loading the event details, location, and associated tasks
+    /// </summary>
+    /// <returns>A task representing the initialization operation</returns>
+    protected override async Task OnInitializedAsync()
+    {
+        _currentEvent = await EventService.GetEventByIdAsync(EventId);
+        
+        if (_currentEvent == null)
+        {
+            Console.WriteLine("Event not found");
+            return;
+        }
+
+        if (_currentEvent.LocationId > 0)
+        {
+            _currentLocation = await LocationService.GetLocationByIdAsync(_currentEvent.LocationId);
+        }
+
+        // Create a list with just this event's ID
+        var eventIds = new List<int> { EventId };
+        _tasks = await TaskService.GetTasksByEventIdAsync(eventIds);
+    }
+
+    /// <summary>
+    /// Navigates back to the events overview page
+    /// </summary>
+    private void NavigateToEvents()
+    {
+        NavigationManager.NavigateTo("/eventsoverview");
+    }
+
+    /// <summary>
+    /// Opens the detailed view of a specific task
+    /// Updates the URL with the task ID without forcing a page reload
+    /// </summary>
+    /// <param name="taskId">The ID of the task to display</param>
+    private void OpenTask(int taskId)
+    {
+        NavigationManager.NavigateTo($"/eventviewer/{EventId}?taskId={taskId}",forceLoad: false, true);
+        // display task on right side of the screen
+    }
+    }
+}

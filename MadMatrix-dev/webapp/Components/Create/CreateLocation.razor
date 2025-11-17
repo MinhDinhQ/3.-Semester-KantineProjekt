@@ -1,0 +1,188 @@
+@using webapp.Service
+@using webapp.Service.LoginService
+@inject ILocationService LocationService
+@inject ILoginService LoginService
+
+@if (currentUser?.Roles.Contains(UserRole.Administrator) == true)
+{
+    <EditForm Model="@locationModel" OnValidSubmit="HandleCreateLocation" class="card" style="margin: 5px auto; border: none; box-shadow: none">
+        <h3 style="margin-bottom: 20px;">Lokation adminstration</h3>
+
+        <div class="row">
+            <div>
+                <div class="form-group">
+                    <label for="locationName" style="font-weight: bold;">Opret Lokation</label>
+                    <InputText id="locationName" class="form-control" @bind-Value="locationModel.Name" placeholder="Navngiv lokationens navn" />
+                </div>
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary" style="margin-bottom: 10px; margin-top: 10px; width: 100%">Opret Lokation</button>
+                </div>
+                @if (!string.IsNullOrEmpty(successMessage))
+                {
+                    <div class="alert alert-success" role="alert">
+                        @successMessage
+                    </div>
+                }
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="alert alert-danger" role="alert">
+                        @errorMessage
+                    </div>
+                }
+            </div>
+
+            <div>
+                <div class="form-group">
+                    <label for="locationDelete" style="font-weight: bold;">Slet lokation</label>
+                    <InputSelect id="locationDelete" class="form-control" @bind-Value="selectedLocationId">
+                        <option value="0">Vælg ønskede lokation for at slette</option>
+                        @foreach (var location in locationsList)
+                        {
+                            <option value="@location.Id">@location.Name</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="form-group">
+                    <button type="button"
+                            class="btn btn-danger"
+                            @onclick="HandleDeleteLocation"
+                            disabled="@(selectedLocationId == 0)"
+                            style="margin-bottom: 10px; margin-top: 10px; width: 100%">
+                        Slet lokation
+                    </button>
+                </div>
+                @if (!string.IsNullOrEmpty(deleteSuccessMessage))
+                {
+                    <div class="alert alert-success" role="alert">
+                        @deleteSuccessMessage
+                    </div>
+                }
+                @if (!string.IsNullOrEmpty(deleteErrorMessage))
+                {
+                    <div class="alert alert-danger" role="alert">
+                        @deleteErrorMessage
+                    </div>
+                }
+            </div>
+        </div>
+    </EditForm>
+    
+@code {
+    /// <summary>
+    /// Model for creating a new location
+    /// </summary>
+    private Location locationModel = new() { Id = 0, Name = string.Empty };
+
+    /// <summary>
+    /// Stores error messages during location operations
+    /// </summary>
+    private string errorMessage = string.Empty;
+    private string successMessage = string.Empty;
+    private string deleteErrorMessage = string.Empty;
+    private string deleteSuccessMessage = string.Empty;
+
+    /// <summary>
+    /// Collection of all available locations
+    /// </summary>
+    private IEnumerable<Location> locationsList = Array.Empty<Location>();
+
+    /// <summary>
+    /// ID of the location selected for deletion
+    /// </summary>
+    private int selectedLocationId;
+
+    /// <summary>
+    /// Currently logged in user
+    /// </summary>
+    private User? currentUser;
+
+    /// <summary>
+    /// Callback event triggered when a location is created or deleted
+    /// </summary>
+
+    /// <summary>
+    /// Initializes the component by loading the current user and refreshing the locations list
+    /// </summary>
+    /// <returns>A task representing the asynchronous operation</returns>
+    protected override async Task OnInitializedAsync()
+    {
+        currentUser = await LoginService.GetCurrentUser();
+        await RefreshLocations();
+    }
+
+    /// <summary>
+    /// Refreshes the list of locations from the service
+    /// </summary>
+    /// <returns>A task representing the asynchronous operation</returns>
+    private async Task RefreshLocations() => 
+        locationsList = await LocationService.GetAllLocationsAsync();
+
+    /// <summary>
+    /// Handles the deletion of a selected location
+    /// </summary>
+    /// <returns>
+    /// A task representing the asynchronous operation.
+    /// On success, refreshes the location list and resets selection.
+    /// On failure, sets an error message.
+    /// </returns>
+    private async Task HandleDeleteLocation()
+    {
+        Console.WriteLine($"Selected Location ID: {selectedLocationId}");
+        if (selectedLocationId == 0) return;
+
+        try
+        {
+            deleteSuccessMessage = string.Empty;
+            deleteErrorMessage = string.Empty;
+
+            if (await LocationService.DeleteLocationAsync(selectedLocationId))
+            {
+                await RefreshLocations();
+                selectedLocationId = 0;
+                deleteSuccessMessage = "Lokationen blev slettet med succes!";
+            }
+            else
+            {
+                deleteErrorMessage = "Kunne ikke slette lokationen. Prøv venligst igen.";
+            }
+        }
+        catch (Exception ex)
+        {
+            deleteErrorMessage = $"Der opstod en fejl under sletning: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Handles the creation of a new location
+    /// </summary>
+    /// <returns>
+    /// A task representing the asynchronous operation.
+    /// On success, clears the form and refreshes the location list.
+    /// On failure, sets an error message.
+    /// </returns>
+    private async Task HandleCreateLocation()
+    {
+        try 
+        {
+            successMessage = string.Empty;
+            errorMessage = string.Empty;
+            
+            if (await LocationService.CreateLocationAsync(locationModel))
+            {
+                locationModel = new() { Id = 0, Name = string.Empty };
+                await RefreshLocations();
+                successMessage = "Lokationen blev oprettet med succes!";
+            }
+            else
+            {
+                errorMessage = "Kunne ikke oprette lokationen. Prøv venligst igen.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Der opstod en fejl: {ex.Message}";
+        }
+    }
+}
+
+}
